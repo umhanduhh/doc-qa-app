@@ -1,5 +1,20 @@
 import { google } from 'googleapis';
 import { NextResponse } from 'next/server';
+import { GaxiosError } from 'gaxios';
+
+// Define interfaces for the document structure
+interface Document {
+  name: string | null;
+  id: string | null;
+  type: string | null;
+  content: string;
+}
+
+interface DriveFile {
+  id: string | null;
+  name: string | null;
+  mimeType: string | null;
+}
 
 export async function GET() {
   console.log('=== Starting Google Drive API call ===');
@@ -34,7 +49,7 @@ export async function GET() {
     }
 
     const documents = await Promise.all(
-      response.data.files.map(async (file) => {
+      response.data.files.map(async (file: DriveFile) => {
         console.log('Processing file:', file.name);
         try {
           if (file.mimeType === 'application/vnd.google-apps.document') {
@@ -49,7 +64,7 @@ export async function GET() {
               id: file.id,
               type: file.mimeType,
               content: doc.data as string
-            };
+            } satisfies Document;
           } else {
             const doc = await drive.files.get({
               fileId: file.id!,
@@ -60,25 +75,27 @@ export async function GET() {
               id: file.id,
               type: file.mimeType,
               content: typeof doc.data === 'string' ? doc.data : JSON.stringify(doc.data)
-            };
+            } satisfies Document;
           }
-        } catch (error: any) {
+        } catch (error) {
           console.error(`Error processing file ${file.name}:`, error);
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
           return {
             name: file.name,
             id: file.id,
             type: file.mimeType,
-            content: `Error: ${error.message}`
-          };
+            content: `Error: ${errorMessage}`
+          } satisfies Document;
         }
       })
     );
 
     return NextResponse.json({ documents });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Error in Google Drive route:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(
-      { message: `Error fetching documents: ${error.message}` },
+      { message: `Error fetching documents: ${errorMessage}` },
       { status: 500 }
     );
   }
