@@ -11,6 +11,12 @@ interface Document {
   content: string;
 }
 
+interface DriveFile {
+  id: string;
+  name: string;
+  mimeType: string;
+}
+
 export async function GET() {
   console.log('=== Starting Google Drive API call ===');
   
@@ -43,12 +49,17 @@ export async function GET() {
     }
 
     const documents = await Promise.all(
-      response.data.files.map(async (file) => {
+      response.data.files.map(async (file: DriveFile) => {
         console.log('Processing file:', file.name);
         try {
+          if (!file.id) {
+            throw new Error('File ID is missing');
+          }
+
           const doc = await drive.files.get({
             fileId: file.id,
             alt: 'media',
+            fields: '*',
           });
           
           return {
@@ -75,8 +86,7 @@ export async function GET() {
 
     return NextResponse.json(
       { 
-        message: error instanceof Error ? error.message : 'Unknown error',
-        details: error instanceof GaxiosError ? error.message : undefined
+        message: error instanceof Error ? error.message : 'Unknown error'
       },
       { status: 500 }
     );
