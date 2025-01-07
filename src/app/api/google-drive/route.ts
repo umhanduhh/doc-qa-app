@@ -4,7 +4,6 @@ import { google } from 'googleapis';
 import { NextResponse } from 'next/server';
 import { GaxiosError } from 'gaxios';
 
-// Define interfaces for the document structure
 interface Document {
   name: string;
   id: string;
@@ -43,14 +42,15 @@ export async function GET() {
       throw new Error('No files array in response');
     }
 
-    const documents: Document[] = await Promise.all(
-      response.data.files.map(async (file: any) => {
+    const documents = await Promise.all(
+      response.data.files.map(async (file) => {
         console.log('Processing file:', file.name);
         try {
           const doc = await drive.files.get({
-            fileId: file.id!,
+            fileId: file.id,
             alt: 'media',
           });
+          
           return {
             name: file.name,
             id: file.id,
@@ -72,16 +72,12 @@ export async function GET() {
     return NextResponse.json({ documents });
   } catch (error) {
     console.error('Error in Google Drive route:', error);
-    
-    if (error instanceof GaxiosError) {
-      return NextResponse.json(
-        { message: `Google API Error: ${error.message}` },
-        { status: error.code || 500 }
-      );
-    }
 
     return NextResponse.json(
-      { message: `Error fetching documents: ${error instanceof Error ? error.message : 'Unknown error'}` },
+      { 
+        message: error instanceof Error ? error.message : 'Unknown error',
+        details: error instanceof GaxiosError ? error.message : undefined
+      },
       { status: 500 }
     );
   }
