@@ -1,19 +1,15 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import { google } from 'googleapis';
 import { NextResponse } from 'next/server';
 import { GaxiosError } from 'gaxios';
 
 // Define interfaces for the document structure
 interface Document {
-  name: string | null;
-  id: string | null;
-  type: string | null;
+  name: string;
+  id: string;
+  type: string;
   content: string;
-}
-
-interface DriveFile {
-  id: string | null;
-  name: string | null;
-  mimeType: string | null;
 }
 
 export async function GET() {
@@ -27,7 +23,6 @@ export async function GET() {
       },
       scopes: ['https://www.googleapis.com/auth/drive.readonly'],
     });
-
     console.log('Auth created successfully');
     
     const drive = google.drive({ version: 'v3', auth });
@@ -48,44 +43,28 @@ export async function GET() {
       throw new Error('No files array in response');
     }
 
-    const documents = await Promise.all(
-      response.data.files.map(async (file: DriveFile) => {
+    const documents: Document[] = await Promise.all(
+      response.data.files.map(async (file: any) => {
         console.log('Processing file:', file.name);
         try {
-          if (file.mimeType === 'application/vnd.google-apps.document') {
-            // For Google Docs, we need to export as plain text
-            const doc = await drive.files.export({
-              fileId: file.id!,
-              mimeType: 'text/plain',
-            });
-            
-            return {
-              name: file.name,
-              id: file.id,
-              type: file.mimeType,
-              content: doc.data as string
-            } satisfies Document;
-          } else {
-            const doc = await drive.files.get({
-              fileId: file.id!,
-              alt: 'media',
-            });
-            return {
-              name: file.name,
-              id: file.id,
-              type: file.mimeType,
-              content: typeof doc.data === 'string' ? doc.data : JSON.stringify(doc.data)
-            } satisfies Document;
-          }
-        } catch (error) {
-          console.error(`Error processing file ${file.name}:`, error);
-          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          const doc = await drive.files.get({
+            fileId: file.id!,
+            alt: 'media',
+          });
           return {
             name: file.name,
             id: file.id,
             type: file.mimeType,
-            content: `Error: ${errorMessage}`
-          } satisfies Document;
+            content: typeof doc.data === 'string' ? doc.data : JSON.stringify(doc.data)
+          };
+        } catch (error) {
+          console.error(`Error processing file ${file.name}:`, error);
+          return {
+            name: file.name,
+            id: file.id,
+            type: file.mimeType,
+            content: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
+          };
         }
       })
     );
@@ -93,9 +72,16 @@ export async function GET() {
     return NextResponse.json({ documents });
   } catch (error) {
     console.error('Error in Google Drive route:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    
+    if (error instanceof GaxiosError) {
+      return NextResponse.json(
+        { message: `Google API Error: ${error.message}` },
+        { status: error.code || 500 }
+      );
+    }
+
     return NextResponse.json(
-      { message: `Error fetching documents: ${errorMessage}` },
+      { message: `Error fetching documents: ${error instanceof Error ? error.message : 'Unknown error'}` },
       { status: 500 }
     );
   }
