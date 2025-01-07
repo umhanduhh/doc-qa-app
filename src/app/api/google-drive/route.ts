@@ -3,18 +3,15 @@
 import { google } from 'googleapis';
 import { NextResponse } from 'next/server';
 import { GaxiosError } from 'gaxios';
+import { drive_v3 } from 'googleapis';
+
+type Schema$File = drive_v3.Schema$File;
 
 interface Document {
   name: string;
   id: string;
   type: string;
   content: string;
-}
-
-interface DriveFile {
-  id: string;
-  name: string;
-  mimeType: string;
 }
 
 export async function GET() {
@@ -49,7 +46,7 @@ export async function GET() {
     }
 
     const documents = await Promise.all(
-      response.data.files.map(async (file: DriveFile) => {
+      response.data.files.map(async (file: Schema$File) => {
         console.log('Processing file:', file.name);
         try {
           if (!file.id) {
@@ -59,21 +56,20 @@ export async function GET() {
           const doc = await drive.files.get({
             fileId: file.id,
             alt: 'media',
-            fields: '*',
           });
           
           return {
-            name: file.name,
+            name: file.name || 'Unnamed file',
             id: file.id,
-            type: file.mimeType,
+            type: file.mimeType || 'unknown',
             content: typeof doc.data === 'string' ? doc.data : JSON.stringify(doc.data)
           };
         } catch (error) {
           console.error(`Error processing file ${file.name}:`, error);
           return {
-            name: file.name,
-            id: file.id,
-            type: file.mimeType,
+            name: file.name || 'Unnamed file',
+            id: file.id || 'unknown',
+            type: file.mimeType || 'unknown',
             content: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
           };
         }
