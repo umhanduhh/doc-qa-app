@@ -27,13 +27,14 @@ export async function POST(request: Request) {
       }]
     });
 
-    if (!message.content || !message.content[0] || !message.content[0].text) {
+    // Changed how we handle the response content
+    const response = message.content?.[0]?.type === 'text' ? message.content[0].text : null;
+    
+    if (!response) {
       throw new Error('Invalid response from Claude');
     }
 
-    return NextResponse.json({ 
-      answer: message.content[0].text 
-    });
+    return NextResponse.json({ answer: response });
 
   } catch (error: any) {
     console.error('Error:', error);
