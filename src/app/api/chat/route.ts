@@ -5,17 +5,37 @@ export async function POST(request: Request) {
   console.log('Function started at:', new Date().toISOString());
 
   try {
-    // Log the entire request body for debugging
-    const requestBody = await request.json();
-    console.log('Full request body:', JSON.stringify({
-      questionLength: requestBody.question?.length,
-      documentsCount: requestBody.documents?.length,
-      historyCount: requestBody.history?.length
-    }, null, 2));
+    // Log the raw request body for debugging
+    const rawBody = await request.text();
+    console.log('Raw request body:', rawBody);
 
-    const { question, documents, history } = requestBody;
+    let requestBody;
+    try {
+      requestBody = JSON.parse(rawBody);
+    } catch (parseError) {
+      console.error('JSON Parsing Error:', parseError);
+      return NextResponse.json(
+        { message: 'Invalid JSON in request body' },
+        { status: 400 }
+      );
+    }
 
-    // Early validation with more detailed logging
+    console.log('Parsed request body:', JSON.stringify(requestBody, null, 2));
+
+    // Destructure with additional safety
+    const { 
+      question = '', 
+      documents = [], 
+      history = [] 
+    } = requestBody;
+
+    // Detailed input validation
+    console.log('Input validation:', {
+      questionProvided: !!question,
+      documentsCount: documents.length,
+      historyCount: history.length
+    });
+
     if (!question) {
       console.error('Validation Error: No question provided');
       return NextResponse.json(
@@ -37,21 +57,25 @@ export async function POST(request: Request) {
       apiKey: process.env.ANTHROPIC_API_KEY
     });
 
-    // Prepare context and history with additional safety checks
-    const context = (documents || [])
-      .map((doc: any) => {
-        console.log(`Processing document: ${doc?.name || 'Unnamed'}`);
-        return `Document: ${doc?.name || 'Unnamed'}\nContent: ${doc?.content || ''}`;
-      })
-      .join('\n\n');
+    // Prepare context with extensive logging
+    const context = documents.map((doc: any, index: number) => {
+      console.log(`Document ${index + 1}:`, {
+        name: doc?.name,
+        contentLength: doc?.content?.length
+      });
+      return `Document: ${doc?.name || `Document ${index + 1}`}\nContent: ${doc?.content || ''}`;
+    }).join('\n\n');
 
-    const conversationHistory = (history || [])
-      .map((msg: any) => `${msg?.role || 'unknown'}: ${msg?.content || ''}`)
-      .join('\n');
+    const conversationHistory = history.map((msg: any, index: number) => {
+      console.log(`History item ${index + 1}:`, {
+        role: msg?.role,
+        contentLength: msg?.content?.length
+      });
+      return `${msg?.role || 'unknown'}: ${msg?.content || ''}`;
+    }).join('\n');
 
     console.log('Preparing to send message to Anthropic...');
     
-    // Set a longer timeout and add more detailed logging
     const startTime = Date.now();
     console.log('API call start time:', startTime);
 
@@ -84,11 +108,6 @@ export async function POST(request: Request) {
       errorStack: error.stack,
       timestamp: new Date().toISOString()
     });
-
-    // Check for specific Anthropic SDK or network errors
-    if (error.name === 'APIConnectionError') {
-      console.error('Network or API connection issue:', error.message);
-    }
 
     return NextResponse.json(
       {
