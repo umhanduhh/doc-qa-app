@@ -33,7 +33,7 @@ export async function GET() {
 
     const response = await drive.files.list({
       q: `'${process.env.GOOGLE_DRIVE_FOLDER_ID}' in parents and trashed = false`,
-      fields: 'files(id, name, mimeType, size)',
+      fields: 'files(id, name, mimeType)',
       pageSize: 10
     });
 
@@ -46,16 +46,29 @@ export async function GET() {
     const documents = await Promise.all(
       (response.data.files || []).map(async (file) => {
         try {
-          const doc = await drive.files.get({
-            fileId: file.id!,
-            alt: 'media'
-          });
+          let content = '';
+          
+          // Handle Google Docs files
+          if (file.mimeType === 'application/vnd.google-apps.document') {
+            const doc = await drive.files.export({
+              fileId: file.id!,
+              mimeType: 'text/plain'
+            });
+            content = doc.data as string;
+          } else {
+            // Handle other file types
+            const doc = await drive.files.get({
+              fileId: file.id!,
+              alt: 'media'
+            });
+            content = typeof doc.data === 'string' ? doc.data : JSON.stringify(doc.data);
+          }
 
           return {
             name: file.name || 'Unnamed file',
             id: file.id!,
             type: file.mimeType || 'unknown',
-            content: typeof doc.data === 'string' ? doc.data : JSON.stringify(doc.data)
+            content
           };
         } catch (error) {
           console.error(`Error getting file ${file.name}:`, error);
