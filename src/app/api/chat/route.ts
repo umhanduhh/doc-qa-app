@@ -80,7 +80,7 @@ export async function POST(request: Request) {
     console.log('API call start time:', startTime);
 
     const message = await client.messages.create({
-      model: 'claude-3-opus-20240229',
+      model: 'claude-3-haiku-latest',
       max_tokens: 1024,
       messages: [{
         role: 'user',
