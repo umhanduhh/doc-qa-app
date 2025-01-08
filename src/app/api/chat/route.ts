@@ -5,7 +5,7 @@ import { NextResponse } from 'next/server';
 export async function POST(request: Request) {
   try {
     const { question, documents, history } = await request.json();
-    
+
     if (!process.env.ANTHROPIC_API_KEY) {
       throw new Error('ANTHROPIC_API_KEY is not configured');
     }
@@ -21,11 +21,11 @@ export async function POST(request: Request) {
       historyCount: history?.length
     });
 
-    const context = documents.map((doc: any) => 
+    const context = documents.map((doc: any) =>
       `Document: ${doc.name}\nContent: ${doc.content}`
     ).join('\n\n');
 
-    const conversationHistory = history?.map((msg: any) => 
+    const conversationHistory = history?.map((msg: any) =>
       `${msg.role}: ${msg.content}`
     ).join('\n') || '';
 
@@ -38,17 +38,17 @@ export async function POST(request: Request) {
       }]
     });
 
-    if (!message.content?.[0]?.text) {
-      throw new Error('Invalid response from Claude API');
+    const textContent = message.content.find(block => block.type === 'text');
+    if (!textContent || textContent.type !== 'text') {
+      throw new Error('No text content in response');
     }
 
-    return NextResponse.json({ answer: message.content[0].text });
-
+    return NextResponse.json({ answer: textContent.text });
   } catch (error: any) {
     console.error('Chat API Error:', error);
-    
+
     return NextResponse.json(
-      { 
+      {
         message: 'Error processing request',
         error: error.message || 'Unknown error'
       },
