@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { google } from 'googleapis';
 import { NextResponse } from 'next/server';
-import pdfParse from 'pdf-parse';
+const pdfParse = require('pdf-parse');
 
 export async function GET() {
   try {
@@ -96,9 +96,9 @@ export async function GET() {
             });
 
             try {
-              // Parse the PDF and extract text
-              const pdfBuffer = Buffer.from(response.data);
-              const pdfData = await pdfParse(pdfBuffer);
+              // Convert ArrayBuffer to Buffer
+              const buffer = Buffer.from(response.data as ArrayBuffer);
+              const pdfData = await pdfParse(buffer);
               
               // Clean up the extracted text
               const cleanText = pdfData.text
