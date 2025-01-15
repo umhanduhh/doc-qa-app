@@ -32,8 +32,13 @@ export async function GET() {
     const documents = await Promise.all(
       response.data.files.map(async (file) => {
         try {
+          // Handle different file types
+          if (!file.id) {
+            throw new Error('File ID is missing');
+          }
+
           // Handle Google Sheets
-          if (file.mimeType === 'application/vnd.google-apps.spreadsheet' && file.id) {
+          if (file.mimeType === 'application/vnd.google-apps.spreadsheet') {
             const sheetsResponse = await sheets.spreadsheets.get({
               spreadsheetId: file.id,
               includeGridData: false,
@@ -43,13 +48,10 @@ export async function GET() {
               throw new Error('No sheets found in spreadsheet');
             }
 
-            // Get all sheets in the spreadsheet
             const allSheetData = await Promise.all(
               sheetsResponse.data.sheets.map(async (sheet) => {
                 const sheetTitle = sheet.properties?.title;
-                if (!sheetTitle) {
-                  return null;
-                }
+                if (!sheetTitle) return null;
 
                 try {
                   const dataResponse = await sheets.spreadsheets.values.get({
@@ -68,7 +70,6 @@ export async function GET() {
               })
             );
 
-            // Filter out any failed sheets and format the content
             const formattedContent = allSheetData
               .filter((sheet): sheet is { sheetName: string; data: any[][] } => sheet !== null)
               .map(sheet => {
@@ -83,9 +84,41 @@ export async function GET() {
               name: file.name || 'Unnamed spreadsheet',
               content: formattedContent || 'Empty spreadsheet'
             };
-          } 
-          // Handle regular documents
-          else if (file.id) {
+          }
+          // Handle PDFs and other binary files
+          else if (file.mimeType === 'application/pdf' || 
+                   file.mimeType === 'application/vnd.google-apps.pdf') {
+            // Get the PDF content as a base64 string
+            const response = await drive.files.get({
+              fileId: file.id,
+              alt: 'media',
+            }, {
+              responseType: 'arraybuffer'
+            });
+
+            // Convert buffer to string (this will be the raw text content)
+            const content = Buffer.from(response.data).toString('base64');
+
+            return {
+              name: file.name || 'Unnamed PDF',
+              content: `PDF Content (Base64 encoded): ${content}`,
+              mimeType: file.mimeType
+            };
+          }
+          // Handle Google Docs
+          else if (file.mimeType === 'application/vnd.google-apps.document') {
+            const doc = await drive.files.export({
+              fileId: file.id,
+              mimeType: 'text/plain',
+            });
+
+            return {
+              name: file.name || 'Unnamed document',
+              content: typeof doc.data === 'string' ? doc.data : JSON.stringify(doc.data)
+            };
+          }
+          // Handle regular text files and other documents
+          else {
             const doc = await drive.files.get({
               fileId: file.id,
               alt: 'media',
@@ -95,18 +128,20 @@ export async function GET() {
               name: file.name || 'Unnamed document',
               content: typeof doc.data === 'string' ? doc.data : JSON.stringify(doc.data)
             };
-          } else {
-            throw new Error('Invalid file ID');
           }
         } catch (error) {
           console.error(`Error fetching file ${file.name}:`, error);
           return {
             name: file.name || 'Unnamed document',
-            content: 'Error: Could not read file content'
+            content: `Error: Could not read file content. Error details: ${error.message}`
           };
         }
       })
     );
+
+    // Log the number of documents and their types for debugging
+    console.log('Documents processed:', documents.length);
+    console.log('Document types:', response.data.files.map(f => f.mimeType));
 
     return NextResponse.json({ documents });
   } catch (error: any) {
