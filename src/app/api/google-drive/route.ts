@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { google } from 'googleapis';
 import { NextResponse } from 'next/server';
+import pdfParse from 'pdf-parse';
 
 export async function GET() {
   try {
@@ -18,7 +19,6 @@ export async function GET() {
     const drive = google.drive({ version: 'v3', auth });
     const sheets = google.sheets({ version: 'v4', auth });
 
-    // Get files from the specified folder
     const response = await drive.files.list({
       q: `'${process.env.GOOGLE_DRIVE_FOLDER_ID}' in parents and trashed = false`,
       fields: 'files(id, name, mimeType)',
@@ -28,11 +28,9 @@ export async function GET() {
       throw new Error('No files found');
     }
 
-    // Get the content of each document
     const documents = await Promise.all(
       response.data.files.map(async (file) => {
         try {
-          // Handle different file types
           if (!file.id) {
             throw new Error('File ID is missing');
           }
@@ -85,10 +83,11 @@ export async function GET() {
               content: formattedContent || 'Empty spreadsheet'
             };
           }
-          // Handle PDFs and other binary files
+          // Handle PDFs
           else if (file.mimeType === 'application/pdf' || 
                    file.mimeType === 'application/vnd.google-apps.pdf') {
-            // Get the PDF content as a base64 string
+            console.log(`Processing PDF: ${file.name}`);
+            
             const response = await drive.files.get({
               fileId: file.id,
               alt: 'media',
@@ -96,14 +95,32 @@ export async function GET() {
               responseType: 'arraybuffer'
             });
 
-            // Convert buffer to string (this will be the raw text content)
-            const content = Buffer.from(response.data).toString('base64');
+            try {
+              // Parse the PDF and extract text
+              const pdfBuffer = Buffer.from(response.data);
+              const pdfData = await pdfParse(pdfBuffer);
+              
+              // Clean up the extracted text
+              const cleanText = pdfData.text
+                .replace(/\s+/g, ' ')  // Replace multiple spaces with single space
+                .trim();               // Remove leading/trailing whitespace
 
-            return {
-              name: file.name || 'Unnamed PDF',
-              content: `PDF Content (Base64 encoded): ${content}`,
-              mimeType: file.mimeType
-            };
+              console.log(`Successfully extracted ${cleanText.length} characters from PDF`);
+
+              return {
+                name: file.name || 'Unnamed PDF',
+                content: cleanText || 'No text content found in PDF',
+                pageCount: pdfData.numpages,
+                mimeType: file.mimeType
+              };
+            } catch (pdfError) {
+              console.error(`Error parsing PDF ${file.name}:`, pdfError);
+              return {
+                name: file.name || 'Unnamed PDF',
+                content: `Error extracting text from PDF: ${pdfError.message}`,
+                mimeType: file.mimeType
+              };
+            }
           }
           // Handle Google Docs
           else if (file.mimeType === 'application/vnd.google-apps.document') {
@@ -139,7 +156,7 @@ export async function GET() {
       })
     );
 
-    // Log the number of documents and their types for debugging
+    // Log processing summary
     console.log('Documents processed:', documents.length);
     console.log('Document types:', response.data.files.map(f => f.mimeType));
 
