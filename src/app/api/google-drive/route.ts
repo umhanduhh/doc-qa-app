@@ -113,11 +113,11 @@ export async function GET() {
                 pageCount: pdfData.numpages,
                 mimeType: file.mimeType
               };
-            } catch (pdfError) {
-              console.error(`Error parsing PDF ${file.name}:`, pdfError);
+            } catch (error: any) {  // Type error as any for error handling
+              console.error(`Error parsing PDF ${file.name}:`, error);
               return {
                 name: file.name || 'Unnamed PDF',
-                content: `Error extracting text from PDF: ${pdfError.message}`,
+                content: `Error extracting text from PDF: ${error?.message || 'Unknown PDF parsing error'}`,
                 mimeType: file.mimeType
               };
             }
@@ -146,17 +146,16 @@ export async function GET() {
               content: typeof doc.data === 'string' ? doc.data : JSON.stringify(doc.data)
             };
           }
-        } catch (error) {
+        } catch (error: any) {
           console.error(`Error fetching file ${file.name}:`, error);
           return {
             name: file.name || 'Unnamed document',
-            content: `Error: Could not read file content. Error details: ${error.message}`
+            content: `Error: Could not read file content. Error details: ${error?.message || 'Unknown error'}`
           };
         }
       })
     );
 
-    // Log processing summary
     console.log('Documents processed:', documents.length);
     console.log('Document types:', response.data.files.map(f => f.mimeType));
 
@@ -167,7 +166,7 @@ export async function GET() {
     return NextResponse.json(
       { 
         message: 'Failed to fetch documents',
-        error: error.message || 'Unknown error'
+        error: error?.message || 'Unknown error'
       },
       { status: 500 }
     );
